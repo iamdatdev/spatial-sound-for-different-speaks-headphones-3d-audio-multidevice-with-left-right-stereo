@@ -1,10 +1,10 @@
 using NAudio.CoreAudioApi;
-using NAudio.Wave;
-using DoubleHeadphones3D.Audio;
+using DoubleBluetoothSpeakers.Audio;
 
-Console.Title = "Double Headphones 3D - Stereo + Latency";
-Console.WriteLine("Double Headphones 3D — stereo-preserving dual output");
-Console.WriteLine("Left/right channels are preserved; delay can be adjusted per headphone.");
+Console.Title = "Double Bluetooth Speakers - Stereo + Delay";
+Console.WriteLine("Double Bluetooth Speakers");
+Console.WriteLine("Mirrors the same full stereo mix to two selected playback devices.");
+Console.WriteLine("Left/right channels remain in their original positions within each output stream.");
 Console.WriteLine();
 
 using var enumerator = new MMDeviceEnumerator();
@@ -13,38 +13,59 @@ var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Ac
 if (devices.Count < 2)
 {
     Console.WriteLine("Windows reports fewer than two active playback devices.");
-    Console.WriteLine("Connect both Bluetooth headphones in Settings > Bluetooth & devices, then retry.");
+    Console.WriteLine("Connect both speakers in Settings > Bluetooth & devices, then restart.");
     return;
 }
 
+var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
 Console.WriteLine("Active playback devices:");
-for (var i = 0; i < devices.Count; i++)
+for (int i = 0; i < devices.Count; i++)
 {
-    var isDefault = devices[i].ID == enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia).ID;
-    Console.WriteLine($"  [{i}] {devices[i].FriendlyName}{(isDefault ? "  (Windows default capture source)" : "")}");
+    string tag = devices[i].ID == defaultDevice.ID ? " (Windows default capture source)" : "";
+    Console.WriteLine($"  [{i}] {devices[i].FriendlyName}{tag}");
 }
 
 Console.WriteLine();
-Console.WriteLine("For the first test, leave Windows default output on laptop speakers.");
-Console.WriteLine("Choose your two Bluetooth headphones as the outputs to avoid feedback.");
-var first = ReadIndex("Choose headphone A index: ", devices.Count);
-var second = ReadIndex("Choose headphone B index: ", devices.Count);
+Console.WriteLine("Select the two speakers you want to play the same audio.");
+Console.WriteLine("For the first test, keep Windows' default output on a THIRD device (for example, laptop speakers).");
+Console.WriteLine("This avoids routing the captured loopback audio back into its own capture source.");
+Console.WriteLine();
+
+int first = ReadIndex("Choose speaker A index: ", devices.Count);
+int second = ReadIndex("Choose speaker B index: ", devices.Count);
+
 if (first == second)
 {
-    Console.WriteLine("Choose two different devices. Exiting.");
+    Console.WriteLine("Select two different playback devices. Exiting.");
     return;
+}
+
+if (devices[first].ID == defaultDevice.ID || devices[second].ID == defaultDevice.ID)
+{
+    Console.WriteLine("WARNING: One selected speaker is also the loopback capture source.");
+    Console.WriteLine("This can cause feedback or echo. Prefer a separate Windows default output.");
 }
 
 using var router = new DualOutputRouter(devices[first], devices[second]);
-router.Start();
+try
+{
+    router.Start();
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Could not start audio routing: {ex.Message}");
+    Console.WriteLine("Check that both speakers are connected and listed as active playback devices.");
+    return;
+}
 
 Console.WriteLine();
-Console.WriteLine("Controls (each press changes delay by 10 ms):");
-Console.WriteLine("  A / Z = headphone A delay +10 / -10 ms");
-Console.WriteLine("  K / M = headphone B delay +10 / -10 ms");
+Console.WriteLine("Both outputs receive the full stereo stream.");
+Console.WriteLine("Delay controls (manual adjustment, 0–500 ms):");
+Console.WriteLine("  A / Z = speaker A delay +10 / -10 ms");
+Console.WriteLine("  K / M = speaker B delay +10 / -10 ms");
 Console.WriteLine("  R     = reset both delays to 0 ms");
 Console.WriteLine("  Q     = quit");
-Console.WriteLine("Start with 0 ms, then add delay to the headphone that sounds EARLIER.");
+Console.WriteLine("If one speaker is heard earlier, add delay to that speaker.");
 ShowDelays();
 
 while (true)
@@ -80,15 +101,15 @@ while (true)
 }
 
 void ShowDelays() =>
-    Console.WriteLine($"Headphone A delay: {router.FirstDelayMs} ms | Headphone B delay: {router.SecondDelayMs} ms");
+    Console.WriteLine($"Speaker A delay: {router.FirstDelayMs} ms | Speaker B delay: {router.SecondDelayMs} ms");
 
 static int ReadIndex(string prompt, int count)
 {
     while (true)
     {
         Console.Write(prompt);
-        var input = Console.ReadLine();
-        if (int.TryParse(input, out var index) && index >= 0 && index < count)
+        string? input = Console.ReadLine();
+        if (int.TryParse(input, out int index) && index >= 0 && index < count)
             return index;
         Console.WriteLine($"Enter a number from 0 to {count - 1}.");
     }

@@ -1,12 +1,12 @@
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace DoubleHeadphones3D.Audio;
+namespace DoubleBluetoothSpeakers.Audio;
 
 /// <summary>
-/// Captures default Windows render audio with WASAPI loopback and mirrors the
-/// original stereo signal to two selected playback endpoints. Each endpoint
-/// has an independently adjustable delay to help align Bluetooth devices.
+/// Captures the Windows default render mix using WASAPI loopback and sends
+/// identical interleaved audio frames to two selected output endpoints.
+/// No channel swap, split, downmix, or widening is applied.
 /// </summary>
 public sealed class DualOutputRouter : IDisposable
 {
@@ -19,7 +19,6 @@ public sealed class DualOutputRouter : IDisposable
     private BufferedWaveProvider? _secondBuffer;
     private DelayedWaveProvider? _firstDelay;
     private DelayedWaveProvider? _secondDelay;
-    private readonly object _gate = new();
     private bool _started;
     private bool _disposed;
 
@@ -47,12 +46,15 @@ public sealed class DualOutputRouter : IDisposable
         if (_started) return;
 
         _capture = new WasapiLoopbackCapture();
-        var format = _capture.WaveFormat;
+        WaveFormat format = _capture.WaveFormat;
+        Console.WriteLine($"Windows loopback format: {format}");
+        if (format.Channels != 2)
+            Console.WriteLine("WARNING: capture is not stereo; Windows may be configured for a non-stereo default output.");
 
         _firstBuffer = CreateBuffer(format);
         _secondBuffer = CreateBuffer(format);
-        _firstDelay = new DelayedWaveProvider(_firstBuffer, 0);
-        _secondDelay = new DelayedWaveProvider(_secondBuffer, 0);
+        _firstDelay = new DelayedWaveProvider(_firstBuffer);
+        _secondDelay = new DelayedWaveProvider(_secondBuffer);
 
         _firstOut = new WasapiOut(_firstDevice, AudioClientShareMode.Shared, useEventSync: true, latency: 100);
         _secondOut = new WasapiOut(_secondDevice, AudioClientShareMode.Shared, useEventSync: true, latency: 100);
@@ -66,9 +68,6 @@ public sealed class DualOutputRouter : IDisposable
         _secondOut.Play();
         _capture.StartRecording();
         _started = true;
-
-        Console.WriteLine($"Capture format: {format}");
-        Console.WriteLine("Stereo channels are passed through unchanged (left stays left, right stays right).");
     }
 
     private static BufferedWaveProvider CreateBuffer(WaveFormat format) => new(format)
@@ -83,24 +82,20 @@ public sealed class DualOutputRouter : IDisposable
         if (_firstBuffer is null || _secondBuffer is null || e.BytesRecorded <= 0)
             return;
 
-        // Do not swap, downmix, or widen channels: preserve left/right positioning.
-        lock (_gate)
-        {
-            _firstBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-            _secondBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
-        }
+        // Exact copy preserves the original channel ordering and sample values.
+        _firstBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+        _secondBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
     }
 
     private static void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
         if (e.Exception is not null)
-            Console.WriteLine($"Capture stopped: {e.Exception.Message}");
+            Console.WriteLine($"Loopback capture stopped: {e.Exception.Message}");
     }
 
     public void Stop()
     {
         if (!_started) return;
-
         try { _capture?.StopRecording(); } catch { }
         try { _firstOut?.Stop(); } catch { }
         try { _secondOut?.Stop(); } catch { }

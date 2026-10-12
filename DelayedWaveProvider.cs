@@ -1,11 +1,10 @@
 using NAudio.Wave;
 
-namespace DoubleHeadphones3D.Audio;
+namespace DoubleBluetoothSpeakers.Audio;
 
 /// <summary>
-/// Adds an adjustable delay to a byte stream while preserving audio frame order.
-/// Delay changes take effect immediately; changing it can cause a brief timing
-/// transition. This is a practical alignment control, not automatic latency measurement.
+/// Adds a configurable delay to an audio stream. This allows manual alignment
+/// of two speakers; it does not measure Bluetooth latency automatically.
 /// </summary>
 public sealed class DelayedWaveProvider : IWaveProvider
 {
@@ -26,10 +25,8 @@ public sealed class DelayedWaveProvider : IWaveProvider
         {
             lock (_gate)
             {
-                int clamped = Math.Clamp(value, 0, 500);
-                if (clamped == _delayMs) return;
-                _delayMs = clamped;
-                int delayBytes = GetAlignedDelayBytes(clamped);
+                _delayMs = Math.Clamp(value, 0, 500);
+                int delayBytes = GetDelayBytes(_delayMs);
                 _ring = new byte[Math.Max(_blockAlign, delayBytes + _blockAlign)];
                 _writePosition = 0;
             }
@@ -51,36 +48,28 @@ public sealed class DelayedWaveProvider : IWaveProvider
 
         lock (_gate)
         {
-            int delayBytes = GetAlignedDelayBytes(_delayMs);
+            int delayBytes = GetDelayBytes(_delayMs);
             if (delayBytes == 0) return read;
-
-            // Ensure delay buffer can hold the selected delay and current audio frame.
-            int required = Math.Max(_blockAlign, delayBytes + _blockAlign);
-            if (_ring.Length < required)
-            {
-                _ring = new byte[required];
-                _writePosition = 0;
-            }
 
             int alignedRead = read - (read % _blockAlign);
             for (int i = 0; i < alignedRead; i++)
             {
                 int readPosition = (_writePosition - delayBytes + _ring.Length) % _ring.Length;
-                byte delayed = _ring[readPosition];
+                byte delayedByte = _ring[readPosition];
                 _ring[_writePosition] = buffer[offset + i];
-                buffer[offset + i] = delayed;
+                buffer[offset + i] = delayedByte;
+
                 _writePosition++;
                 if (_writePosition >= _ring.Length) _writePosition = 0;
             }
 
-            // Preserve any trailing partial frame unchanged (normally none).
             return read;
         }
     }
 
-    private int GetAlignedDelayBytes(int milliseconds)
+    private int GetDelayBytes(int milliseconds)
     {
         long raw = (long)_bytesPerSecond * milliseconds / 1000;
-        return (int)(raw - (raw % _blockAlign));
+        return (int)(raw - raw % _blockAlign);
     }
 }
