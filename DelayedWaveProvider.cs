@@ -3,8 +3,8 @@ using NAudio.Wave;
 namespace DoubleBluetoothSpeakers.Audio;
 
 /// <summary>
-/// Adds a configurable delay to an audio stream. This allows manual alignment
-/// of two speakers; it does not measure Bluetooth latency automatically.
+/// Manual stream delay for aligning two independent speaker outputs.
+/// Delay is adjustable from 0 to 500 ms; no automatic latency measurement.
 /// </summary>
 public sealed class DelayedWaveProvider : IWaveProvider
 {
@@ -58,11 +58,9 @@ public sealed class DelayedWaveProvider : IWaveProvider
                 byte delayedByte = _ring[readPosition];
                 _ring[_writePosition] = buffer[offset + i];
                 buffer[offset + i] = delayedByte;
-
                 _writePosition++;
                 if (_writePosition >= _ring.Length) _writePosition = 0;
             }
-
             return read;
         }
     }

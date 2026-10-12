@@ -1,10 +1,10 @@
 using NAudio.CoreAudioApi;
 using DoubleBluetoothSpeakers.Audio;
 
-Console.Title = "Double Bluetooth Speakers - Stereo + Delay";
-Console.WriteLine("Double Bluetooth Speakers");
-Console.WriteLine("Mirrors the same full stereo mix to two selected playback devices.");
-Console.WriteLine("Left/right channels remain in their original positions within each output stream.");
+Console.Title = "Double Bluetooth Speakers - Left/Right Split + Delay";
+Console.WriteLine("Double Bluetooth Speakers — separate stereo channels across two speakers");
+Console.WriteLine("Speaker A receives LEFT-channel audio only.");
+Console.WriteLine("Speaker B receives RIGHT-channel audio only.");
 Console.WriteLine();
 
 using var enumerator = new MMDeviceEnumerator();
@@ -26,27 +26,23 @@ for (int i = 0; i < devices.Count; i++)
 }
 
 Console.WriteLine();
-Console.WriteLine("Select the two speakers you want to play the same audio.");
-Console.WriteLine("For the first test, keep Windows' default output on a THIRD device (for example, laptop speakers).");
-Console.WriteLine("This avoids routing the captured loopback audio back into its own capture source.");
+Console.WriteLine("Choose the PHYSICAL LEFT speaker first, then the PHYSICAL RIGHT speaker.");
+Console.WriteLine("The Windows default output is the capture source. For initial testing, keep it");
+Console.WriteLine("on a third device (such as laptop speakers) to avoid feedback.");
 Console.WriteLine();
 
-int first = ReadIndex("Choose speaker A index: ", devices.Count);
-int second = ReadIndex("Choose speaker B index: ", devices.Count);
-
-if (first == second)
+int leftIndex = ReadIndex("Choose LEFT speaker index: ", devices.Count);
+int rightIndex = ReadIndex("Choose RIGHT speaker index: ", devices.Count);
+if (leftIndex == rightIndex)
 {
-    Console.WriteLine("Select two different playback devices. Exiting.");
+    Console.WriteLine("Choose two different devices. Exiting.");
     return;
 }
 
-if (devices[first].ID == defaultDevice.ID || devices[second].ID == defaultDevice.ID)
-{
-    Console.WriteLine("WARNING: One selected speaker is also the loopback capture source.");
-    Console.WriteLine("This can cause feedback or echo. Prefer a separate Windows default output.");
-}
+if (devices[leftIndex].ID == defaultDevice.ID || devices[rightIndex].ID == defaultDevice.ID)
+    Console.WriteLine("WARNING: A selected speaker is the capture source; feedback/echo may occur.");
 
-using var router = new DualOutputRouter(devices[first], devices[second]);
+using var router = new DualOutputRouter(devices[leftIndex], devices[rightIndex]);
 try
 {
     router.Start();
@@ -54,18 +50,21 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"Could not start audio routing: {ex.Message}");
-    Console.WriteLine("Check that both speakers are connected and listed as active playback devices.");
+    Console.WriteLine("Check that both speakers are connected and active in Windows.");
     return;
 }
 
 Console.WriteLine();
-Console.WriteLine("Both outputs receive the full stereo stream.");
-Console.WriteLine("Delay controls (manual adjustment, 0–500 ms):");
-Console.WriteLine("  A / Z = speaker A delay +10 / -10 ms");
-Console.WriteLine("  K / M = speaker B delay +10 / -10 ms");
+Console.WriteLine("Channel routing:");
+Console.WriteLine("  LEFT speaker: left channel only (right channel muted)");
+Console.WriteLine("  RIGHT speaker: right channel only (left channel muted)");
+Console.WriteLine();
+Console.WriteLine("Delay controls (0–500 ms, manual adjustment):");
+Console.WriteLine("  A / Z = left speaker delay +10 / -10 ms");
+Console.WriteLine("  K / M = right speaker delay +10 / -10 ms");
 Console.WriteLine("  R     = reset both delays to 0 ms");
 Console.WriteLine("  Q     = quit");
-Console.WriteLine("If one speaker is heard earlier, add delay to that speaker.");
+Console.WriteLine("If a speaker sounds early, increase that speaker's delay.");
 ShowDelays();
 
 while (true)
@@ -101,7 +100,7 @@ while (true)
 }
 
 void ShowDelays() =>
-    Console.WriteLine($"Speaker A delay: {router.FirstDelayMs} ms | Speaker B delay: {router.SecondDelayMs} ms");
+    Console.WriteLine($"Left speaker delay: {router.FirstDelayMs} ms | Right speaker delay: {router.SecondDelayMs} ms");
 
 static int ReadIndex(string prompt, int count)
 {

@@ -1,18 +1,18 @@
-# Double Bluetooth Speakers — stereo + manual delay
+# Double Bluetooth Speakers — left/right split + manual delay
 
-A Windows 11 C# prototype that captures the Windows default playback mix through WASAPI loopback and mirrors the same full audio stream to two selected playback devices.
+Windows 11 C# prototype using NAudio/WASAPI loopback.
 
-## Behavior
-- Both speakers receive the full stereo stream.
-- Left-channel samples remain in the left channel and right-channel samples remain in the right channel for each output endpoint.
-- Each speaker has a manually adjustable 0–500 ms delay.
-- This does not split left audio onto one speaker and right audio onto the other.
-- This does not automatically measure or synchronize Bluetooth latency.
+## Intended behavior
+- The selected LEFT speaker receives only the source's left channel.
+- The selected RIGHT speaker receives only the source's right channel.
+- Each endpoint is given a valid stereo stream: left speaker gets `[L, silence]`; right speaker gets `[silence, R]`.
+- Each speaker has a manual 0–500 ms delay adjustment.
+- This is channel splitting across two physical speakers, not full stereo mirrored to both speakers.
 
 ## Requirements
 - Windows 11 x64
-- .NET 8 SDK (for local build)
-- Two speakers paired and connected as separate active Windows playback devices
+- .NET 8 SDK for local builds
+- Two speakers paired and visible as active playback endpoints
 
 ## Build locally
 ```powershell
@@ -22,15 +22,14 @@ dotnet run -c Release
 ```
 
 ## Controls
-- `A` / `Z`: add / subtract 10 ms delay for speaker A
-- `K` / `M`: add / subtract 10 ms delay for speaker B
-- `R`: reset both delays
+- `A` / `Z`: add/subtract 10 ms for LEFT speaker
+- `K` / `M`: add/subtract 10 ms for RIGHT speaker
+- `R`: reset delays
 - `Q`: quit
 
-Start at 0 ms. Add delay to the speaker that sounds earlier. Adjusting delay resets that output's delay line and may cause a short dropout.
-
-## Avoid feedback
-The app captures the Windows default output. For initial testing, keep the Windows default output on a third device (such as laptop speakers), then select the two target speakers in the app. If you choose the default capture endpoint as one of the outputs, feedback/echo may occur. With this loopback design, the default device can also play the original audio.
-
-## GitHub Actions build
-The workflow at `.github/workflows/build-windows.yml` builds a self-contained Windows x64 executable and uploads `DoubleBluetoothSpeakers-win-x64` as an artifact.
+## Setup notes
+- This app captures the Windows default playback mix using WASAPI loopback.
+- For initial testing, leave the Windows default playback output on a third device (such as laptop speakers) and select the two Bluetooth speakers in the app. Otherwise, selecting the capture source as an output may create feedback.
+- The implementation supports 32-bit float stereo and 16-bit PCM stereo loopback. It will show an error for other formats.
+- Delay controls are manual; they do not measure Bluetooth latency automatically. Adjusting delay resets the delay line and can briefly interrupt audio.
+- This source has not been tested on the user's specific PC.
