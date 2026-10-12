@@ -1,11 +1,12 @@
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace DoubleBluetoothSpeakers.Audio;
+namespace DoubleBluetoothSpeakers;
 
 /// <summary>
-/// Captures the Windows default render mix, routes only the left channel to
-/// the first selected speaker and only the right channel to the second speaker.
+/// Captures the Windows default playback mix and routes left-channel content
+/// to the selected physical left speaker and right-channel content to the
+/// selected physical right speaker.
 /// </summary>
 public sealed class DualOutputRouter : IDisposable
 {
@@ -21,13 +22,13 @@ public sealed class DualOutputRouter : IDisposable
     private bool _started;
     private bool _disposed;
 
-    public int FirstDelayMs
+    public int LeftDelayMs
     {
         get => _leftDelay?.DelayMs ?? 0;
         set { if (_leftDelay is not null) _leftDelay.DelayMs = value; }
     }
 
-    public int SecondDelayMs
+    public int RightDelayMs
     {
         get => _rightDelay?.DelayMs ?? 0;
         set { if (_rightDelay is not null) _rightDelay.DelayMs = value; }
@@ -48,11 +49,10 @@ public sealed class DualOutputRouter : IDisposable
         WaveFormat format = _capture.WaveFormat;
         Console.WriteLine($"Windows loopback format: {format}");
 
-        if (format.Channels != 2)
-            throw new NotSupportedException($"Expected stereo loopback capture, but Windows returned {format.Channels} channels. Set the Windows default output format to stereo and try again.");
-
         if (!StereoChannelSplitter.IsSupported(format))
-            throw new NotSupportedException($"Unsupported capture format: {format}. This build supports 32-bit float or 16-bit PCM stereo.");
+            throw new NotSupportedException(
+                $"Expected 2-channel 32-bit float or 16-bit PCM audio; Windows provided {format}. " +
+                "Set the Windows default playback format to stereo and try again.");
 
         _leftBuffer = CreateBuffer(format);
         _rightBuffer = CreateBuffer(format);
@@ -81,11 +81,12 @@ public sealed class DualOutputRouter : IDisposable
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
-        if (_leftBuffer is null || _rightBuffer is null || e.BytesRecorded <= 0) return;
+        if (_leftBuffer is null || _rightBuffer is null || _capture is null || e.BytesRecorded <= 0)
+            return;
 
         byte[] left = new byte[e.BytesRecorded];
         byte[] right = new byte[e.BytesRecorded];
-        StereoChannelSplitter.Split(e.Buffer, e.BytesRecorded, left, right, _capture!.WaveFormat);
+        StereoChannelSplitter.Split(e.Buffer, e.BytesRecorded, left, right, _capture.WaveFormat);
 
         _leftBuffer.AddSamples(left, 0, e.BytesRecorded);
         _rightBuffer.AddSamples(right, 0, e.BytesRecorded);
@@ -110,12 +111,14 @@ public sealed class DualOutputRouter : IDisposable
     {
         if (_disposed) return;
         Stop();
+
         if (_capture is not null)
         {
             _capture.DataAvailable -= OnDataAvailable;
             _capture.RecordingStopped -= OnRecordingStopped;
             _capture.Dispose();
         }
+
         _leftOut?.Dispose();
         _rightOut?.Dispose();
         _leftDevice.Dispose();

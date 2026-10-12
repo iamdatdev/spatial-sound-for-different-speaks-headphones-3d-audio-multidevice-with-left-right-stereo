@@ -1,12 +1,13 @@
 using NAudio.Wave;
 
-namespace DoubleBluetoothSpeakers.Audio;
+namespace DoubleBluetoothSpeakers;
 
 /// <summary>
-/// Produces two stereo buffers from one interleaved stereo input:
-/// left output = [L, 0], right output = [0, R].
-/// This means each physical speaker receives its own side's audio while
-/// remaining a valid two-channel stream for Windows playback APIs.
+/// Converts interleaved stereo into two per-speaker streams.
+/// LEFT stream: [L, L] — left content copied to both channels of the left
+/// speaker's stream. RIGHT stream: [R, R] — right content copied to both
+/// channels of the right speaker's stream. Duplicating each side is important
+/// for mono Bluetooth speakers that downmix their stereo input.
 /// </summary>
 public static class StereoChannelSplitter
 {
@@ -15,41 +16,42 @@ public static class StereoChannelSplitter
         ((format.Encoding == WaveFormatEncoding.IeeeFloat && format.BitsPerSample == 32) ||
          (format.Encoding == WaveFormatEncoding.Pcm && format.BitsPerSample == 16));
 
-    public static void Split(byte[] source, int bytesRecorded, byte[] left, byte[] right, WaveFormat format)
+    public static void Split(byte[] source, int byteCount, byte[] left, byte[] right, WaveFormat format)
     {
         if (!IsSupported(format))
-            throw new NotSupportedException($"Unsupported audio format: {format}");
+            throw new NotSupportedException($"Unsupported capture format: {format}");
 
         int frameSize = format.BlockAlign;
-        int usable = bytesRecorded - (bytesRecorded % frameSize);
+        int usable = byteCount - (byteCount % frameSize);
 
         if (format.Encoding == WaveFormatEncoding.IeeeFloat && format.BitsPerSample == 32)
         {
             for (int i = 0; i < usable; i += 8)
             {
-                // Interleaved float32 stereo: L in bytes 0..3, R in bytes 4..7.
+                // Input frame: [L float32][R float32]. Output frames: [L][L], [R][R].
                 Buffer.BlockCopy(source, i, left, i, 4);
-                Array.Clear(left, i + 4, 4);
-                Array.Clear(right, i, 4);
+                Buffer.BlockCopy(source, i, left, i + 4, 4);
+                Buffer.BlockCopy(source, i + 4, right, i, 4);
                 Buffer.BlockCopy(source, i + 4, right, i + 4, 4);
             }
         }
-        else // signed 16-bit PCM stereo
+        else
         {
             for (int i = 0; i < usable; i += 4)
             {
+                // Input frame: [L int16][R int16]. Output frames: [L][L], [R][R].
                 Buffer.BlockCopy(source, i, left, i, 2);
-                Array.Clear(left, i + 2, 2);
-                Array.Clear(right, i, 2);
+                Buffer.BlockCopy(source, i, left, i + 2, 2);
+                Buffer.BlockCopy(source, i + 2, right, i, 2);
                 Buffer.BlockCopy(source, i + 2, right, i + 2, 2);
             }
         }
 
-        // Copy any incomplete trailing bytes unchanged only to avoid leaving buffers uninitialized.
-        if (usable < bytesRecorded)
+        // A capture callback should contain whole frames; zero-fill any unexpected tail.
+        if (usable < byteCount)
         {
-            Buffer.BlockCopy(source, usable, left, usable, bytesRecorded - usable);
-            Buffer.BlockCopy(source, usable, right, usable, bytesRecorded - usable);
+            Array.Clear(left, usable, byteCount - usable);
+            Array.Clear(right, usable, byteCount - usable);
         }
     }
 }
