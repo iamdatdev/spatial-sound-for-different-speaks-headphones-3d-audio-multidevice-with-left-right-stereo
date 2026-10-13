@@ -1,27 +1,21 @@
-# Double Bluetooth Speakers — correct left/right routing
+# Double Bluetooth Speakers — Virtual Input build
 
-This Windows 11 C# prototype captures the Windows default stereo playback mix and routes it to two separately selected playback devices.
+This build lets you choose a Windows **recording/input endpoint** as the audio source, then routes the source's left channel to the selected left Bluetooth speaker and its right channel to the selected right Bluetooth speaker. Independent manual output delays are included.
 
-- The physical LEFT speaker receives the source LEFT channel.
-- The physical RIGHT speaker receives the source RIGHT channel.
-- Each selected speaker's output stream contains that side's signal duplicated into both channels (`[L,L]` for left; `[R,R]` for right). This avoids relying on a mono Bluetooth speaker's downmix behavior.
-- Center-panned content is present in both source channels, so it will naturally play from both speakers.
-- Independent manual output delay controls are included (0–500 ms, 10 ms increments).
+## VB-CABLE setup
 
-## Build locally (PowerShell)
-```powershell
-dotnet restore DoubleBluetoothSpeakers.csproj
-dotnet build DoubleBluetoothSpeakers.csproj -c Release
-dotnet run --project DoubleBluetoothSpeakers.csproj -c Release
-```
+1. In Windows Sound settings, set the playback/output device for the audio you want to route to **CABLE Input (VB-Audio Virtual Cable)**. You can set it as the Windows default output, or assign individual apps to it under Volume mixer.
+2. Run the app.
+3. In the **INPUT** list, choose **CABLE Output**. This is the recording endpoint that receives audio sent into the virtual cable. Do not choose `CABLE Input` from the input list.
+4. Choose the physical left and right Bluetooth speakers from the **OUTPUT** list.
+5. Adjust latency using the on-screen keys: `A/Z` for left delay, `K/M` for right delay, `R` to reset, `Q` to quit.
 
-## Controls
-- `A` / `Z`: add/subtract 10 ms delay for LEFT speaker
-- `K` / `M`: add/subtract 10 ms delay for RIGHT speaker
-- `R`: reset delays
-- `Q`: quit
+If the cable is not listed, enable it under Windows Settings > System > Sound > All sound devices. The exact device names may vary by VB-CABLE version.
 
-## Important setup
-The app captures the Windows default render mix through WASAPI loopback. For initial testing, keep the Windows default output on a separate third device, such as laptop speakers, and choose the two Bluetooth speakers as outputs. Otherwise feedback or echo may occur. Set Windows playback to stereo if possible.
+## Important
 
-Delay is manual, not automatic latency measurement. Bluetooth devices may still have different internal latency. This project has not been tested on the user's specific hardware.
+- The project targets Windows x64 and .NET 8.
+- Source format currently supports stereo 32-bit float or stereo 16-bit PCM. If the selected input uses a different format, set its Windows format to stereo and try again.
+- The program's output is the two selected Bluetooth devices; it does not automatically mirror audio to the laptop speakers.
+- Bluetooth devices can have substantial and variable latency. The manual delay controls can delay either side, but cannot make a device play earlier.
+- The source code has been updated but was not compiled or tested in this environment.

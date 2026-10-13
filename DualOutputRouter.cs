@@ -4,15 +4,16 @@ using NAudio.Wave;
 namespace DoubleBluetoothSpeakers;
 
 /// <summary>
-/// Captures the Windows default playback mix and routes left-channel content
-/// to the selected physical left speaker and right-channel content to the
-/// selected physical right speaker.
+/// Captures a selected Windows recording endpoint (for example, VB-CABLE's
+/// "CABLE Output") and routes left-channel content to the selected physical
+/// left speaker and right-channel content to the selected physical right speaker.
 /// </summary>
 public sealed class DualOutputRouter : IDisposable
 {
     private readonly MMDevice _leftDevice;
     private readonly MMDevice _rightDevice;
-    private WasapiLoopbackCapture? _capture;
+    private readonly MMDevice _inputDevice;
+    private WasapiCapture? _capture;
     private WasapiOut? _leftOut;
     private WasapiOut? _rightOut;
     private BufferedWaveProvider? _leftBuffer;
@@ -34,8 +35,9 @@ public sealed class DualOutputRouter : IDisposable
         set { if (_rightDelay is not null) _rightDelay.DelayMs = value; }
     }
 
-    public DualOutputRouter(MMDevice leftDevice, MMDevice rightDevice)
+    public DualOutputRouter(MMDevice inputDevice, MMDevice leftDevice, MMDevice rightDevice)
     {
+        _inputDevice = inputDevice;
         _leftDevice = leftDevice;
         _rightDevice = rightDevice;
     }
@@ -45,9 +47,11 @@ public sealed class DualOutputRouter : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_started) return;
 
-        _capture = new WasapiLoopbackCapture();
+        // Capture a Windows recording endpoint directly. For VB-CABLE, select
+        // "CABLE Output" (the recording/input endpoint), not "CABLE Input".
+        _capture = new WasapiCapture(_inputDevice, useEventSync: true, audioBufferMilliseconds: 100);
         WaveFormat format = _capture.WaveFormat;
-        Console.WriteLine($"Windows loopback format: {format}");
+        Console.WriteLine($"Selected input format: {format}");
 
         if (!StereoChannelSplitter.IsSupported(format))
             throw new NotSupportedException(
@@ -95,7 +99,7 @@ public sealed class DualOutputRouter : IDisposable
     private static void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
         if (e.Exception is not null)
-            Console.WriteLine($"Loopback capture stopped: {e.Exception.Message}");
+            Console.WriteLine($"Input capture stopped: {e.Exception.Message}");
     }
 
     public void Stop()
@@ -121,6 +125,7 @@ public sealed class DualOutputRouter : IDisposable
 
         _leftOut?.Dispose();
         _rightOut?.Dispose();
+        _inputDevice.Dispose();
         _leftDevice.Dispose();
         _rightDevice.Dispose();
         _disposed = true;

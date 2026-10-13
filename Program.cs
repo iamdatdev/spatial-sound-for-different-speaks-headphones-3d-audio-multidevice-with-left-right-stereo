@@ -1,47 +1,59 @@
 using NAudio.CoreAudioApi;
 using DoubleBluetoothSpeakers;
 
-Console.Title = "Double Bluetooth Speakers - Correct Stereo";
-Console.WriteLine("Double Bluetooth Speakers — correct left/right routing");
-Console.WriteLine("LEFT speaker gets the source LEFT channel.");
-Console.WriteLine("RIGHT speaker gets the source RIGHT channel.");
-Console.WriteLine("Each side is duplicated to both channels of its own output stream so mono Bluetooth speakers work too.");
+Console.Title = "Double Bluetooth Speakers - Virtual Input";
+Console.WriteLine("Double Bluetooth Speakers — virtual input + correct stereo routing");
+Console.WriteLine("Select the audio INPUT first, then the physical LEFT and RIGHT speakers.");
+Console.WriteLine("For VB-CABLE, the recording endpoint is usually named 'CABLE Output'.");
 Console.WriteLine();
 
 using var enumerator = new MMDeviceEnumerator();
-using var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
+var inputDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).ToList();
+var outputDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
 
-if (devices.Count < 2)
+if (inputDevices.Count == 0)
+{
+    Console.WriteLine("Windows sees no active recording/input devices.");
+    Console.WriteLine("Check Settings > System > Sound > All sound devices, and make sure VB-CABLE is enabled.");
+    return;
+}
+
+if (outputDevices.Count < 2)
 {
     Console.WriteLine("Windows sees fewer than two active playback devices.");
     Console.WriteLine("Connect both Bluetooth speakers in Settings > Bluetooth & devices, then restart.");
     return;
 }
 
-Console.WriteLine("Active playback devices:");
-for (int i = 0; i < devices.Count; i++)
-{
-    string tag = devices[i].ID == defaultDevice.ID ? " (Windows default loopback source)" : "";
-    Console.WriteLine($"  [{i}] {devices[i].FriendlyName}{tag}");
-}
+Console.WriteLine("ACTIVE INPUT DEVICES (recording endpoints):");
+for (int i = 0; i < inputDevices.Count; i++)
+    Console.WriteLine($"  [{i}] {inputDevices[i].FriendlyName}");
 
 Console.WriteLine();
-Console.WriteLine("Choose the physical LEFT speaker first, then the physical RIGHT speaker.");
-Console.WriteLine("For initial testing, keep Windows' default output on a separate device to avoid feedback.");
-int leftIndex = ReadIndex("LEFT speaker index: ", devices.Count);
-int rightIndex = ReadIndex("RIGHT speaker index: ", devices.Count);
+Console.WriteLine("ACTIVE OUTPUT DEVICES (playback endpoints):");
+for (int i = 0; i < outputDevices.Count; i++)
+    Console.WriteLine($"  [{i}] {outputDevices[i].FriendlyName}");
+
+Console.WriteLine();
+Console.WriteLine("Choose the VB-CABLE recording endpoint (normally 'CABLE Output').");
+int inputIndex = ReadIndex("INPUT device index: ", inputDevices.Count);
+Console.WriteLine("Now choose the physical speakers.");
+int leftIndex = ReadIndex("LEFT speaker index: ", outputDevices.Count);
+int rightIndex = ReadIndex("RIGHT speaker index: ", outputDevices.Count);
 
 if (leftIndex == rightIndex)
 {
-    Console.WriteLine("Select two different devices. Exiting.");
+    Console.WriteLine("Select two different output devices. Exiting.");
     return;
 }
 
-if (devices[leftIndex].ID == defaultDevice.ID || devices[rightIndex].ID == defaultDevice.ID)
-    Console.WriteLine("WARNING: An output is also the loopback source; feedback or echo may occur.");
+// Dispose unused endpoint handles to avoid holding unnecessary device references.
+for (int i = 0; i < inputDevices.Count; i++)
+    if (i != inputIndex) inputDevices[i].Dispose();
+for (int i = 0; i < outputDevices.Count; i++)
+    if (i != leftIndex && i != rightIndex) outputDevices[i].Dispose();
 
-using var router = new DualOutputRouter(devices[leftIndex], devices[rightIndex]);
+using var router = new DualOutputRouter(inputDevices[inputIndex], outputDevices[leftIndex], outputDevices[rightIndex]);
 try
 {
     router.Start();
@@ -49,7 +61,8 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"Could not start routing: {ex.Message}");
-    Console.WriteLine("Check that both speakers are connected and listed as active Windows playback devices.");
+    Console.WriteLine("Check that the selected input is enabled and uses stereo 32-bit float or 16-bit PCM.");
+    Console.WriteLine("For VB-CABLE, select 'CABLE Output' from the INPUT list.");
     return;
 }
 
@@ -59,7 +72,8 @@ Console.WriteLine("  A / Z = LEFT speaker delay +10 / -10 ms");
 Console.WriteLine("  K / M = RIGHT speaker delay +10 / -10 ms");
 Console.WriteLine("  R     = reset both delays");
 Console.WriteLine("  Q     = quit");
-Console.WriteLine("If one speaker is heard earlier, increase that speaker's delay.");
+Console.WriteLine("Set Windows' playback output to 'CABLE Input' so app audio enters the virtual cable.");
+Console.WriteLine("This app captures the matching 'CABLE Output' recording endpoint.");
 ShowDelays();
 
 while (true)
