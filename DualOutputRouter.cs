@@ -49,7 +49,7 @@ public sealed class DualOutputRouter : IDisposable
 
         // Capture a Windows recording endpoint directly. For VB-CABLE, select
         // "CABLE Output" (the recording/input endpoint), not "CABLE Input".
-        _capture = new WasapiCapture(_inputDevice, useEventSync: true, audioBufferMilliseconds: 100);
+      _capture = new WasapiCapture(_inputDevice, true, 100);
         WaveFormat format = _capture.WaveFormat;
         Console.WriteLine($"Selected input format: {format}");
 
